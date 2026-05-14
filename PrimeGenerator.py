@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import random
 
-SMALL_PRIMES = [
+SMALL_PRIMES: list[int] = [
     2, 3, 5, 7, 11, 13, 17, 19, 23, 29,
     31, 37, 41, 43, 47, 53, 59, 61, 67, 71,
     73, 79, 83, 89, 97, 101, 103, 107, 109, 113,
@@ -11,14 +13,16 @@ SMALL_PRIMES = [
 ]
 
 
-def n_bit_random(bits):
+def n_bit_random(bits: int) -> int:
+    """Return a random odd integer with the MSB and LSB both forced to 1."""
     candidate = random.getrandbits(bits)
     candidate |= (1 << (bits - 1))
     candidate |= 1
     return candidate
 
 
-def get_low_level_prime(bits):
+def get_low_level_prime(bits: int) -> int:
+    """Return an n-bit odd candidate that passes trial division against small primes."""
     while True:
         candidate = n_bit_random(bits)
         for divisor in SMALL_PRIMES:
@@ -28,7 +32,11 @@ def get_low_level_prime(bits):
             return candidate
 
 
-def is_miller_rabin_passed(candidate, rounds=20):
+def is_miller_rabin_passed(candidate: int, rounds: int = 20) -> bool:
+    """Return True if candidate passes the Miller-Rabin primality test for all rounds.
+
+    With 20 rounds the probability of a composite passing is less than 4^-20 (~10^-12).
+    """
     if candidate in (2, 3):
         return True
     if candidate <= 1 or candidate % 2 == 0:
@@ -40,7 +48,8 @@ def is_miller_rabin_passed(candidate, rounds=20):
         exponent >>= 1
         max_divisions_by_two += 1
 
-    def is_composite(witness):
+    def is_composite(witness: int) -> bool:
+        """Return True if witness proves candidate is composite."""
         if pow(witness, exponent, candidate) == 1:
             return False
         for power in range(max_divisions_by_two):
@@ -55,7 +64,8 @@ def is_miller_rabin_passed(candidate, rounds=20):
     return True
 
 
-def generate_prime(bits):
+def generate_prime(bits: int) -> int:
+    """Generate and return a random prime of exactly bits bits."""
     while True:
         prime_candidate = get_low_level_prime(bits)
         if is_miller_rabin_passed(prime_candidate):
