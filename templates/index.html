@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SecurePrompt Gateway</title>
+  <style>
+    :root {
+      --bg: #0a1620;
+      --panel: rgba(10, 29, 43, 0.82);
+      --panel-border: rgba(124, 166, 191, 0.22);
+      --ink: #ecf6fb;
+      --muted: #9eb7c6;
+      --accent: #66d9b8;
+      --danger: #ff7d7d;
+      --warn: #ffd479;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(102, 217, 184, 0.18), transparent 34%),
+        radial-gradient(circle at top right, rgba(255, 212, 121, 0.14), transparent 28%),
+        linear-gradient(140deg, #071018, #0d2130 58%, #071018);
+      color: var(--ink);
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .shell {
+      width: min(1100px, 100%);
+      display: grid;
+      grid-template-columns: 1.4fr 0.9fr;
+      gap: 20px;
+    }
+
+    .card {
+      background: var(--panel);
+      backdrop-filter: blur(14px);
+      border: 1px solid var(--panel-border);
+      border-radius: 24px;
+      padding: 24px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+    }
+
+    h1, h2, p {
+      margin-top: 0;
+    }
+
+    .eyebrow {
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--accent);
+      font-size: 0.8rem;
+      margin-bottom: 10px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 260px;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(4, 15, 24, 0.72);
+      color: var(--ink);
+      padding: 16px;
+      resize: vertical;
+      font: inherit;
+    }
+
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 14px 22px;
+      font: inherit;
+      font-weight: 700;
+      background: linear-gradient(90deg, #66d9b8, #9fe870);
+      color: #062131;
+      cursor: pointer;
+    }
+
+    label {
+      color: var(--muted);
+    }
+
+    .status {
+      border-radius: 18px;
+      padding: 18px;
+      margin-top: 18px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .pass {
+      color: var(--accent);
+    }
+
+    .fail {
+      color: var(--danger);
+    }
+
+    .mono {
+      font-family: "SFMono-Regular", "Consolas", monospace;
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+
+    .log {
+      padding: 14px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .log:last-child {
+      border-bottom: 0;
+    }
+
+    @media (max-width: 900px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="card">
+      <div class="eyebrow">SecurePrompt</div>
+      <h1>Enterprise prompt gateway</h1>
+      <p>Each prompt is hashed, signed with the employee RSA private key, encrypted with a one-time AES session key, and then wrapped for the audit proxy with custom RSA.</p>
+      <form method="post" action="/submit">
+        <textarea name="prompt" placeholder="Ask the enterprise AI about source code, logs, or internal debugging data...">{{ prompt_value }}</textarea>
+        <div class="row">
+          <label>
+            <input type="checkbox" name="tamper">
+            Simulate MITM ciphertext tampering
+          </label>
+          <button type="submit">Send via SecurePrompt</button>
+        </div>
+      </form>
+
+      {% if result %}
+      <div class="status">
+        <h2 class="{{ 'pass' if result.accepted else 'fail' }}">
+          {{ "Accepted by audit proxy" if result.accepted else "Rejected by audit proxy" }}
+        </h2>
+        {% if result.error %}
+        <p class="fail">{{ result.error }}</p>
+        {% endif %}
+        <p><strong>Sender:</strong> {{ result.sender_id or "unknown" }}</p>
+        <p><strong>Digest match:</strong> {{ result.digest_matches }}</p>
+        <p><strong>Signature match:</strong> {{ result.signature_matches }}</p>
+      </div>
+      {% endif %}
+    </section>
+
+    <aside class="card">
+      <div class="eyebrow">Audit Trail</div>
+      <h2>Recent decisions</h2>
+      <p class="mono">This log shows whether the proxy accepted or dropped the prompt after decryption and signature verification.</p>
+      {% if audit_tail %}
+        {% for entry in audit_tail %}
+        <div class="log">
+          <div class="{{ 'pass' if entry.accepted else 'fail' }}">
+            {{ "ACCEPTED" if entry.accepted else "REJECTED" }}
+          </div>
+          <div class="mono">{{ entry.timestamp_utc }}</div>
+          <div>Sender: {{ entry.sender_id }}</div>
+          <div class="mono">{{ entry.prompt_preview }}</div>
+        </div>
+        {% endfor %}
+      {% else %}
+      <p class="mono">No audit entries yet.</p>
+      {% endif %}
+    </aside>
+  </div>
+</body>
+</html>
