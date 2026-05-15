@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import random
+import secrets
 
 SMALL_PRIMES: list[int] = [
     2, 3, 5, 7, 11, 13, 17, 19, 23, 29,
@@ -15,7 +15,7 @@ SMALL_PRIMES: list[int] = [
 
 def n_bit_random(bits: int) -> int:
     """Return a random odd integer with the MSB and LSB both forced to 1."""
-    candidate = random.getrandbits(bits)
+    candidate = secrets.randbits(bits)
     candidate |= (1 << (bits - 1))
     candidate |= 1
     return candidate
@@ -58,7 +58,7 @@ def is_miller_rabin_passed(candidate: int, rounds: int = 20) -> bool:
         return True
 
     for _ in range(rounds):
-        witness = random.randrange(2, candidate - 1)
+        witness = secrets.randbelow(candidate - 3) + 2
         if is_composite(witness):
             return False
     return True

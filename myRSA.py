@@ -54,10 +54,10 @@ def rsaKeyGen(nOfBits=128):
      ##
      phi_n = (p-1)*(q-1)
 
-     import random
+     import secrets
      
      while True:
-          e = random.randrange(1, phi_n) 
+          e = secrets.randbelow(phi_n - 1) + 1
           if EuclidGCD(e,phi_n) == 1:
                break
      ##
@@ -218,6 +218,5 @@ def descryptText(ciphertext, K):
           plaintext =  plaintext + chr(int(plainBitString[i:i+8],2))
           i = i + 8
      return plaintext
-
 
 
