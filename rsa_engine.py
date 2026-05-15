@@ -1,3 +1,33 @@
+"""Custom RSA implementation for SecurePrompt (coursework demonstration).
+
+KNOWN LIMITATIONS — NOT FOR PRODUCTION USE
+==========================================
+1. Block encoding (no OAEP):
+   Plaintext is split into fixed-size blocks with a 2-byte length prefix instead
+   of OAEP (Optimal Asymmetric Encryption Padding). Plain-block RSA is vulnerable
+   to chosen-plaintext attacks because it is deterministic. A production system
+   must use RSA-OAEP as specified in PKCS#1 v2.2 (RFC 8017).
+
+2. Signing (no PSS):
+   The RSA private-key transform is applied directly to the SHA-256 hash rather
+   than using RSA-PSS (Probabilistic Signature Scheme). PSS has a formal security
+   proof and randomises each signature. A production system should use RSA-PSS,
+   available via cryptography.hazmat.primitives.asymmetric.padding.PSS.
+
+3. No timing-attack blinding:
+   Private-key modular exponentiations are not blinded. An attacker with precise
+   timing measurements of many decryption calls could recover the private exponent
+   via a side-channel attack. Production RSA libraries apply multiplicative
+   blinding before each private-key operation to prevent this.
+
+4. This module is intentionally self-contained to demonstrate RSA number theory
+   from scratch: prime generation, modular inverse via the Extended Euclidean
+   Algorithm, and square-and-multiply exponentiation. All of these are provided
+   by the standard 'cryptography' library and should be used in production code.
+"""
+
+from __future__ import annotations
+
 import base64
 import json
 import math
@@ -7,10 +37,11 @@ from mulInverseByExtendedEuclidean import mul_inverse
 from PrimeGenerator import generate_prime, is_miller_rabin_passed
 
 
-DEFAULT_PUBLIC_EXPONENT = 65537
+DEFAULT_PUBLIC_EXPONENT: int = 65537
 
 
-def modulo_exp(base, exponent, modulus):
+def modulo_exp(base: int, exponent: int, modulus: int) -> int:
+    """Compute base^exponent mod modulus using square-and-multiply in O(log exponent)."""
     result = 1
     base %= modulus
     while exponent > 0:
@@ -21,13 +52,18 @@ def modulo_exp(base, exponent, modulus):
     return result
 
 
-def gcd(a, b):
+def gcd(a: int, b: int) -> int:
+    """Return the greatest common divisor of a and b."""
     while b:
         a, b = b, a % b
     return a
 
 
-def rsa_key_gen(bits=1024, public_exponent=DEFAULT_PUBLIC_EXPONENT):
+def rsa_key_gen(
+    bits: int = 1024,
+    public_exponent: int = DEFAULT_PUBLIC_EXPONENT,
+) -> tuple[dict, dict, dict]:
+    """Generate an RSA key pair and return (public_key, private_key, metadata)."""
     if bits < 512:
         raise ValueError("RSA key size must be at least 512 bits.")
 
@@ -46,7 +82,7 @@ def rsa_key_gen(bits=1024, public_exponent=DEFAULT_PUBLIC_EXPONENT):
 
     public_key = {"exponent": public_exponent, "modulus": modulus}
     private_key = {"exponent": private_exponent, "modulus": modulus}
-    metadata = {
+    metadata: dict = {
         "p": p_value,
         "q": q_value,
         "phi_n": phi_n,
@@ -55,13 +91,15 @@ def rsa_key_gen(bits=1024, public_exponent=DEFAULT_PUBLIC_EXPONENT):
     return public_key, private_key, metadata
 
 
-def key_byte_lengths(key):
+def key_byte_lengths(key: dict) -> tuple[int, int]:
+    """Return (plain_block_bytes, cipher_block_bytes) for the given key."""
     modulus_bytes = math.ceil(key["modulus"].bit_length() / 8)
     plain_block_bytes = max(3, modulus_bytes - 1)
     return plain_block_bytes, modulus_bytes
 
 
-def rsa_transform_bytes(data, key):
+def rsa_transform_bytes(data: bytes, key: dict) -> bytes:
+    """Apply the RSA forward transform (encrypt or sign) to raw bytes block by block."""
     plain_block_bytes, cipher_block_bytes = key_byte_lengths(key)
     max_chunk_size = plain_block_bytes - 2
     blocks = []
@@ -76,7 +114,8 @@ def rsa_transform_bytes(data, key):
     return b"".join(blocks)
 
 
-def rsa_inverse_transform_bytes(data, key):
+def rsa_inverse_transform_bytes(data: bytes, key: dict) -> bytes:
+    """Apply the RSA inverse transform (decrypt or verify) to raw bytes block by block."""
     plain_block_bytes, cipher_block_bytes = key_byte_lengths(key)
     if len(data) % cipher_block_bytes != 0:
         raise ValueError("Ciphertext length is not aligned to RSA block size.")
@@ -97,24 +136,34 @@ def rsa_inverse_transform_bytes(data, key):
     return b"".join(blocks)
 
 
-def encrypt_bytes(data, public_key):
+def encrypt_bytes(data: bytes, public_key: dict) -> bytes:
+    """Encrypt data with an RSA public key (forward transform)."""
     return rsa_transform_bytes(data, public_key)
 
 
-def decrypt_bytes(data, private_key):
+def decrypt_bytes(data: bytes, private_key: dict) -> bytes:
+    """Decrypt data with an RSA private key (inverse transform)."""
     return rsa_inverse_transform_bytes(data, private_key)
 
 
-def sign_bytes(data, private_key):
+def sign_bytes(data: bytes, private_key: dict) -> bytes:
+    """Sign data by applying the RSA private-key transform to the digest bytes."""
     return rsa_transform_bytes(data, private_key)
 
 
-def verify_signature_bytes(signature, public_key):
+def verify_signature_bytes(signature: bytes, public_key: dict) -> bytes:
+    """Recover the digest from a signature using the RSA public-key inverse transform."""
     return rsa_inverse_transform_bytes(signature, public_key)
 
 
-def key_to_serializable(key, owner, role, metadata=None):
-    payload = {
+def key_to_serializable(
+    key: dict,
+    owner: str,
+    role: str,
+    metadata: dict | None = None,
+) -> dict:
+    """Convert an RSA key dict to a JSON-serializable dict."""
+    payload: dict = {
         "owner": owner,
         "role": role,
         "exponent": str(key["exponent"]),
@@ -125,14 +174,22 @@ def key_to_serializable(key, owner, role, metadata=None):
     return payload
 
 
-def save_key(path, key, owner, role, metadata=None):
+def save_key(
+    path: Path | str,
+    key: dict,
+    owner: str,
+    role: str,
+    metadata: dict | None = None,
+) -> None:
+    """Serialize an RSA key to plaintext JSON and write to path (use for public keys only)."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = key_to_serializable(key, owner, role, metadata)
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
-def load_key(path):
+def load_key(path: Path | str) -> dict:
+    """Load a plaintext RSA public key from a JSON file."""
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     return {
         "owner": payload.get("owner", "unknown"),
@@ -143,21 +200,26 @@ def load_key(path):
     }
 
 
-def export_packet(packet):
+def export_packet(packet: dict) -> str:
+    """Serialize a secure packet dict to an indented JSON string."""
     return json.dumps(packet, indent=2)
 
 
-def import_packet(packet_text):
+def import_packet(packet_text: str) -> dict:
+    """Deserialize a JSON string to a secure packet dict."""
     return json.loads(packet_text)
 
 
-def b64encode_bytes(data):
+def b64encode_bytes(data: bytes) -> str:
+    """Base64-encode bytes to an ASCII string."""
     return base64.b64encode(data).decode("ascii")
 
 
-def b64decode_bytes(data):
+def b64decode_bytes(data: str) -> bytes:
+    """Decode a Base64 ASCII string to bytes."""
     return base64.b64decode(data.encode("ascii"))
 
 
-def validate_generated_prime(prime_value):
+def validate_generated_prime(prime_value: int) -> bool:
+    """Verify that a generated prime passes the Miller-Rabin primality test."""
     return is_miller_rabin_passed(prime_value)

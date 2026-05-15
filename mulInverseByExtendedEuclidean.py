@@ -1,4 +1,8 @@
-def extended_gcd(a, b):
+from __future__ import annotations
+
+
+def extended_gcd(a: int, b: int) -> tuple[int, int, int]:
+    """Return (gcd, x, y) satisfying a*x + b*y == gcd (Bezout's identity)."""
     old_r, r = a, b
     old_s, s = 1, 0
     old_t, t = 0, 1
@@ -12,12 +16,18 @@ def extended_gcd(a, b):
     return old_r, old_s, old_t
 
 
-def mul_inverse(value, modulus):
+def mul_inverse(value: int, modulus: int) -> int:
+    """Return the modular multiplicative inverse of value mod modulus.
+
+    Uses the Extended Euclidean Algorithm. Raises ValueError when the inverse
+    does not exist (i.e. gcd(value, modulus) != 1).
+    """
     gcd, x_value, _ = extended_gcd(value, modulus)
     if gcd != 1:
         raise ValueError("Modular inverse does not exist for non-coprime values.")
     return x_value % modulus
 
 
-def mulInverse(value, modulus):
+def mulInverse(value: int, modulus: int) -> int:
+    """Alias for mul_inverse kept for backward compatibility."""
     return mul_inverse(value, modulus)
